@@ -1,0 +1,26 @@
+# .NET
+**/bin/
+**/obj/
+**/.vs/
+*.user
+*.suo
+
+# Node / Next.js (см. также guap-attractions-web/.gitignore)
+**/node_modules/
+**/.next/
+**/out/
+**/build/
+
+# Секреты и локальная конфигурация
+**/appsettings.json
+**/appsettings.Development.json
+**/.env
+**/.env*.local
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Временные файлы SQL
+**/*_inspect_schema*
+**/setup_verify.out.txt

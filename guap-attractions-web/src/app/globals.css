@@ -1,0 +1,132 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* Палитра и токены в духе портала ГУАП (SUAI theme + тёмная тема как на students.guap.ru) */
+:root {
+  --main-transition: all 0.4s ease;
+  --page-bg: #f7f9fa;
+  --card-bg: #ffffff;
+  --header-bg: #ffffff;
+  --text-heading: #333333;
+  --text-muted: #adb5bd;
+  --pill-bg: #f0f4f8;
+  --hover-bg: #f7f9fa;
+  --input-bg: #ffffff;
+  --link-color: #005aaa;
+  --nav-text: #606265;
+  --nav-text-hover: #2d2f34;
+  --shadow-nav: 0 1px 0 0 rgba(0, 0, 0, 0.04);
+  --shadow-card: 0 0 0.5rem rgba(0, 0, 0, 0.075);
+  --main-background: var(--page-bg);
+  --suai-primary-color: #9b59b6;
+  --suai-primary-hover: #a86ebf;
+  --suai-success-color: #7bcd4a;
+  --suai-info-color: #3498db;
+  --suai-default-border: #e4e5e7;
+  --suai-default-color: #606265;
+  --suai-default-hover: #d9dbdd;
+  --suai-link-hover: #65bcc1;
+  --suai-brand-color-1: #005aaa;
+  --suai-button-bg: #005aaa;
+  --suai-brand-color-2: #e72b70;
+  --suai-brand-color-3: #ab3a8d;
+  --suai-shadow: var(--shadow-card);
+  --suai-border-radius: 0.75rem;
+  --sidebar-width: 180px;
+  --header-height: 55px;
+  --footer-height: 60px;
+  --guap-header-accent-line: #8cc63f;
+  --suai-theme-color: var(--suai-brand-color-1);
+  --background: var(--main-background);
+  --foreground: var(--suai-default-color);
+}
+
+/* Тёмная тема: те же оттенки, что у портала ГУАП (фон #16191d, карточки #21252b, ссылки #58a6ff) */
+.dark {
+  color-scheme: dark;
+  --page-bg: #16191d;
+  --card-bg: #21252b;
+  --header-bg: #1d222b;
+  --text-heading: #ffffff;
+  --text-muted: #8b95a3;
+  --pill-bg: #2a3038;
+  --hover-bg: #2a3038;
+  --input-bg: #21252b;
+  --link-color: #58a6ff;
+  --nav-text: #b0b8c4;
+  --nav-text-hover: #ffffff;
+  --shadow-nav: 0 1px 0 0 rgba(0, 0, 0, 0.35);
+  --shadow-card: 0 4px 24px rgba(0, 0, 0, 0.35);
+  --main-background: #16191d;
+  --suai-default-color: #b0b8c4;
+  --suai-default-border: #2d333b;
+  --guap-header-accent-line: #3d4a5c;
+  --suai-brand-color-1: #58a6ff;
+  --suai-button-bg: #4b76ad;
+  --suai-theme-color: #58a6ff;
+}
+
+html {
+  overflow-anchor: none;
+  scrollbar-gutter: stable;
+  height: 100%;
+}
+
+*,
+::after,
+::before {
+  box-sizing: border-box;
+}
+
+body.theme__blue {
+  --suai-theme-color: var(--suai-brand-color-1);
+}
+
+body {
+  margin: 0;
+  min-height: 100%;
+  min-height: 100dvh;
+  background-color: var(--main-background);
+  color: var(--suai-default-color);
+  font-family: var(--font-open-sans), "Open Sans", "Helvetica Neue", Helvetica, Arial,
+    sans-serif;
+  font-size: 13px;
+  font-weight: 400;
+  line-height: 1.5;
+  -webkit-text-size-adjust: 100%;
+  -webkit-tap-highlight-color: rgba(0, 0, 0, 0);
+}
+
+/* Скроллбар в стиле портала */
+:not(.offcanvas-body)::-webkit-scrollbar {
+  width: 10px;
+}
+
+:not(.offcanvas-body)::-webkit-scrollbar-thumb {
+  background: linear-gradient(
+    180deg,
+    var(--suai-brand-color-1) 0%,
+    var(--suai-brand-color-2) 100%
+  );
+  border-radius: 10rem;
+}
+
+html.dark :not(.offcanvas-body)::-webkit-scrollbar-thumb {
+  background: linear-gradient(180deg, #4b76ad 0%, #58a6ff 100%);
+}
+
+:not(.offcanvas-body)::-webkit-scrollbar-track {
+  background-color: transparent;
+  border: transparent;
+}
+
+@layer utilities {
+  .text-balance {
+    text-wrap: balance;
+  }
+
+  .min-h-page {
+    min-height: calc(100dvh - var(--header-height));
+  }
+}

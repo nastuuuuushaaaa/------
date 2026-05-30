@@ -4,6 +4,12 @@ import { useEffect, useMemo, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { getApiBaseUrl } from "@/lib/api-base";
 import { loadUser } from "@/lib/auth";
+import {
+  getPointDisplayMinutes,
+  loadAudioMinutesByAttractionId,
+  minMinutesToFirstIncluded,
+  POINT_TIME_BUFFER_MINUTES,
+} from "@/lib/route-time";
 
 type AttractionDto = {
   id: number;
@@ -11,6 +17,7 @@ type AttractionDto = {
   address?: string | null;
   description?: string | null;
   audioUrl?: string | null;
+  audioDurationMinutes?: number;
 };
 
 type RoutePointDto = {
@@ -50,6 +57,9 @@ export default function RoutePlanner({ route }: RoutePlannerProps) {
 
   const [lastPointId, setLastPointId] = useState<number | null>(null);
   const [isCompleted, setIsCompleted] = useState(false);
+  const [audioMinutesByAttractionId, setAudioMinutesByAttractionId] = useState<
+    Map<number, number>
+  >(() => new Map());
 
   const lastPointName = useMemo(() => {
     if (!lastPointId) return null;
@@ -94,35 +104,58 @@ export default function RoutePlanner({ route }: RoutePlannerProps) {
     setTripMode(t === "roundTrip" ? "roundTrip" : "oneWay");
   }, [searchParams]);
 
-  /** первая точка в маршруте (с учётом снятых галочек и «продолжить с…») */
-  const firstIncludedPointMinutes = useMemo(() => {
-    const list = visiblePoints.filter((p) => !excludedIds.has(p.attraction.id));
-    if (list.length === 0) return null;
-    return list[0].minutesForPoint;
-  }, [visiblePoints, excludedIds]);
+  useEffect(() => {
+    let cancelled = false;
+    loadAudioMinutesByAttractionId(route.points).then((map) => {
+      if (!cancelled) setAudioMinutesByAttractionId(map);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [route.points]);
 
-  /** сколько минут нужно минимум: в один конец — хватит на первую точку; туда-обратно — ещё половина на дорогу назад */
+  const visibleStartIndex = useMemo(() => {
+    if (!lastPointId || isCompleted) return 0;
+    const idx = route.points.findIndex((p) => p.pointId === lastPointId);
+    return idx >= 0 ? idx : 0;
+  }, [route.points, lastPointId, isCompleted]);
+
+  /** Минимум до первой посещаемой точки (переходы через исключённые учитываются). */
+  const minToFirstIncluded = useMemo(() => {
+    return minMinutesToFirstIncluded(
+      route.points,
+      excludedIds,
+      audioMinutesByAttractionId,
+      visibleStartIndex
+    );
+  }, [route.points, excludedIds, audioMinutesByAttractionId, visibleStartIndex]);
+
+  /** Сколько минут нужно минимум с учётом возврата в ГУАП. */
   const minRequiredMinutes = useMemo(() => {
-    if (firstIncludedPointMinutes == null) return null;
+    if (minToFirstIncluded == null) return null;
     if (tripMode === "roundTrip") {
-      return Math.ceil(firstIncludedPointMinutes + firstIncludedPointMinutes / 2);
+      const firstIncluded = visiblePoints.find((p) => !excludedIds.has(p.attraction.id));
+      const returnLeg = firstIncluded
+        ? Math.ceil(firstIncluded.minutesForPoint / 2)
+        : Math.ceil(minToFirstIncluded / 2);
+      return minToFirstIncluded + returnLeg;
     }
-    return firstIncludedPointMinutes;
-  }, [firstIncludedPointMinutes, tripMode]);
+    return minToFirstIncluded;
+  }, [minToFirstIncluded, tripMode, visiblePoints, excludedIds]);
 
   const validateMinutes = (total: number): string | null => {
     if (Number.isNaN(total) || total <= 0) {
       return "Введите положительное число минут.";
     }
-    if (firstIncludedPointMinutes == null) {
+    if (minToFirstIncluded == null) {
       return "Отметьте хотя бы одну точку маршрута.";
     }
     if (minRequiredMinutes != null && total < minRequiredMinutes) {
       if (tripMode === "oneWay") {
-        return `Времени недостаточно: на первую точку заложено ${firstIncludedPointMinutes} мин. Укажите не меньше ${minRequiredMinutes} мин.`;
+        return `Времени недостаточно: до первой точки нужно около ${minToFirstIncluded} мин. (переход, запас ${POINT_TIME_BUFFER_MINUTES} мин. и аудиогид). Укажите не меньше ${minRequiredMinutes} мин.`;
       }
-      const halfBack = Math.ceil(firstIncludedPointMinutes / 2);
-      return `Времени недостаточно: нужно ${firstIncludedPointMinutes} мин. на первую точку и примерно ${halfBack} мин. на возвращение в ГУАП (всего не меньше ${minRequiredMinutes} мин.).`;
+      const returnLeg = minRequiredMinutes - minToFirstIncluded;
+      return `Времени недостаточно: до первой точки около ${minToFirstIncluded} мин. и примерно ${returnLeg} мин. на возвращение в ГУАП (всего не меньше ${minRequiredMinutes} мин.).`;
     }
     return null;
   };
@@ -224,7 +257,9 @@ export default function RoutePlanner({ route }: RoutePlannerProps) {
                       <p className="font-semibold text-guap-heading">{a.title}</p>
                       {a.address && <p className="text-xs text-guap-muted">{a.address}</p>}
                       <p className="mt-1 text-xs text-guap-muted">
-                        Примерно {point.minutesForPoint} мин. на точку
+                        {excluded
+                          ? `Переход ~ ${point.minutesForPoint} мин. (точка исключена, без аудиогида и запаса)`
+                          : `~ ${getPointDisplayMinutes(point, false, audioMinutesByAttractionId)} мин. (переход ${point.minutesForPoint} + запас ${POINT_TIME_BUFFER_MINUTES} мин. + аудиогид)`}
                       </p>
                     </div>
                   </li>

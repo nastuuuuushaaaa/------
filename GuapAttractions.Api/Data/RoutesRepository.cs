@@ -1,6 +1,7 @@
 using System.Data;
 using GuapAttractions.Api.Models;
 using Microsoft.Data.SqlClient;
+using static GuapAttractions.Api.RouteTimeConstants;
 
 namespace GuapAttractions.Api.Data;
 
@@ -82,14 +83,18 @@ public class RoutesRepository
         while (await reader.ReadAsync(cancellationToken))
         {
             var minutesForPoint = reader.GetInt32(reader.GetOrdinal("MinutesForPoint"));
-            totalMinutes += minutesForPoint;
+            var audioDurationMinutes = reader.IsDBNull(reader.GetOrdinal("AttractionAudioDurationMinutes"))
+                ? 0
+                : reader.GetInt32(reader.GetOrdinal("AttractionAudioDurationMinutes"));
+            totalMinutes += minutesForPoint + PointBufferMinutes + audioDurationMinutes;
 
             var attraction = new AttractionDto(
                 Id: reader.GetInt32(reader.GetOrdinal("AttractionId")),
                 Title: reader.GetString(reader.GetOrdinal("AttractionTitle")),
                 Address: reader.IsDBNull(reader.GetOrdinal("AttractionAddress")) ? null : reader.GetString(reader.GetOrdinal("AttractionAddress")),
                 Description: reader.IsDBNull(reader.GetOrdinal("AttractionDescription")) ? null : reader.GetString(reader.GetOrdinal("AttractionDescription")),
-                AudioUrl: reader.IsDBNull(reader.GetOrdinal("AttractionAudioUrl")) ? null : reader.GetString(reader.GetOrdinal("AttractionAudioUrl"))
+                AudioUrl: reader.IsDBNull(reader.GetOrdinal("AttractionAudioUrl")) ? null : reader.GetString(reader.GetOrdinal("AttractionAudioUrl")),
+                AudioDurationMinutes: audioDurationMinutes
             );
 
             rawPoints.Add((

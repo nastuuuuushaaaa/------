@@ -5,6 +5,7 @@ public record AttractionDto(
     string Title,
     string? Address,
     string? Description,
-    string? AudioUrl
+    string? AudioUrl,
+    int AudioDurationMinutes = 0
 );
 

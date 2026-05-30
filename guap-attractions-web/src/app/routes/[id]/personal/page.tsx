@@ -6,11 +6,12 @@ import { useParams, useSearchParams, useRouter } from "next/navigation";
 import Link from "next/link";
 import { getApiBaseUrl } from "@/lib/api-base";
 import { loadUser } from "@/lib/auth";
-
-/** две трети времени на маршрут и аудио, треть запас на дорогу обратно в ГУАП */
-function routeBudgetMinutesReturnToGuap(totalMinutes: number): number {
-  return Math.floor((totalMinutes * 2) / 3);
-}
+import {
+  buildPersonalRouteSlice,
+  getPointDisplayMinutes,
+  loadAudioMinutesByAttractionId,
+  routeBudgetMinutesReturnToGuap,
+} from "@/lib/route-time";
 
 const RouteMap = dynamic(
   () => import("@/components/RouteMap").then((m) => m.RouteMap),
@@ -23,6 +24,7 @@ type AttractionDto = {
   address?: string | null;
   description?: string | null;
   audioUrl?: string | null;
+  audioDurationMinutes?: number;
 };
 
 type RoutePointDto = {
@@ -82,6 +84,9 @@ function PersonalRouteContent() {
   const [currentIndex, setCurrentIndex] = useState(0);
   const [routeCompleted, setRouteCompleted] = useState(false);
   const [loading, setLoading] = useState(true);
+  const [audioMinutesByAttractionId, setAudioMinutesByAttractionId] = useState<
+    Map<number, number>
+  >(() => new Map());
 
   const [mapMode, setMapMode] = useState<"route" | "navigation">("route");
   const [userPos, setUserPos] = useState<[number, number] | null>(null);
@@ -155,33 +160,24 @@ function PersonalRouteContent() {
   useEffect(() => {
     let cancelled = false;
 
-    const buildSlice = (
-      allIncluded: RoutePointDto[],
+    const applySlice = (
+      allPoints: RoutePointDto[],
       total: number,
       startFrom: number,
       excludedForSave: Set<number>,
-      roundTripMode: boolean
+      roundTripMode: boolean,
+      audioMap: Map<number, number>
     ) => {
-      let startIdx = 0;
-      if (startFrom > 0) {
-        const found = allIncluded.findIndex((p) => p.pointId === startFrom);
-        if (found >= 0) startIdx = found;
-      }
-
       const budget =
         roundTripMode && total > 0 ? routeBudgetMinutesReturnToGuap(total) : total;
 
-      let acc = 0;
-      const result: RoutePointDto[] = [];
-      for (let i = startIdx; i < allIncluded.length; i++) {
-        const p = allIncluded[i];
-        acc += p.minutesForPoint;
-        if (acc <= budget) result.push(p);
-        else break;
-      }
-      if (result.length === 0 && allIncluded.length > 0) {
-        result.push(allIncluded[startIdx] ?? allIncluded[0]);
-      }
+      const result = buildPersonalRouteSlice(
+        allPoints,
+        budget,
+        excludedForSave,
+        audioMap,
+        startFrom
+      );
 
       if (cancelled) return;
       setPersonalPoints(result);
@@ -192,18 +188,31 @@ function PersonalRouteContent() {
         fetch(`${API_BASE}/api/routes/${routeId}/progress`, {
           method: "POST",
           headers: { "Content-Type": "application/json", "X-User-Id": String(user.id) },
-          body: JSON.stringify({ lastPointId: result[0].pointId, excludedPointIds: Array.from(excludedForSave) }),
+          body: JSON.stringify({
+            lastPointId: result[0].pointId,
+            excludedPointIds: Array.from(excludedForSave),
+          }),
         }).catch(() => {});
       }
     };
 
     fetch(`${API_BASE}/api/routes/${routeId}`, { cache: "no-store" })
       .then((res) => res.json())
-      .then((data: RouteDetailDto) => {
+      .then(async (data: RouteDetailDto) => {
         if (cancelled) return;
         setRoute(data);
 
+        const audioMap = await loadAudioMinutesByAttractionId(data.points);
+        if (cancelled) return;
+        setAudioMinutesByAttractionId(audioMap);
+
         const user = loadUser();
+
+        const runSlice = (effExcluded: Set<number>, startFrom: number) => {
+          if (minutes > 0) {
+            applySlice(data.points, minutes, startFrom, effExcluded, roundTrip, audioMap);
+          }
+        };
 
         if (user) {
           fetch(`${API_BASE}/api/routes/${data.id}/progress`, {
@@ -214,37 +223,34 @@ function PersonalRouteContent() {
               if (cancelled) return;
               if (progress?.completed) setRouteCompleted(true);
 
-              const effExcluded = excludedIds.size > 0
-                ? excludedIds
-                : progress?.excludedPointIds?.length
-                  ? new Set(progress.excludedPointIds)
-                  : excludedIds;
+              const effExcluded =
+                excludedIds.size > 0
+                  ? excludedIds
+                  : progress?.excludedPointIds?.length
+                    ? new Set(progress.excludedPointIds)
+                    : excludedIds;
 
-              const included = data.points.filter((p) => !effExcluded.has(p.attraction.id));
-              const effectiveStartFrom = startFromPointId || 0;
-              if (minutes > 0) {
-                buildSlice(included, minutes, effectiveStartFrom, effExcluded, roundTrip);
-              }
+              runSlice(effExcluded, startFromPointId || 0);
             })
             .catch(() => {
               if (cancelled) return;
-              const included = data.points.filter((p) => !excludedIds.has(p.attraction.id));
-              if (minutes > 0) {
-                buildSlice(included, minutes, startFromPointId, excludedIds, roundTrip);
-              }
+              runSlice(excludedIds, startFromPointId);
             })
-            .finally(() => { if (!cancelled) setLoading(false); });
+            .finally(() => {
+              if (!cancelled) setLoading(false);
+            });
         } else {
-          const included = data.points.filter((p) => !excludedIds.has(p.attraction.id));
-          if (minutes > 0) {
-            buildSlice(included, minutes, startFromPointId, excludedIds, roundTrip);
-          }
+          runSlice(excludedIds, startFromPointId);
           setLoading(false);
         }
       })
-      .catch(() => { if (!cancelled) setLoading(false); });
+      .catch(() => {
+        if (!cancelled) setLoading(false);
+      });
 
-    return () => { cancelled = true; };
+    return () => {
+      cancelled = true;
+    };
   }, [routeId, minutes, startFromPointId, excludedIds, searchParams, roundTrip]);
 
   const savePosition = (pointId: number) => {
@@ -350,7 +356,13 @@ function PersonalRouteContent() {
                     )}
                   </div>
                   <span className="whitespace-nowrap rounded-full bg-guap-pill px-3 py-1 text-xs text-suai-text">
-                    ~ {activePoint.minutesForPoint} мин.
+                    ~{" "}
+                    {getPointDisplayMinutes(
+                      activePoint,
+                      excludedIds.has(activePoint.attraction.id),
+                      audioMinutesByAttractionId
+                    )}{" "}
+                    мин.
                   </span>
                 </div>
 

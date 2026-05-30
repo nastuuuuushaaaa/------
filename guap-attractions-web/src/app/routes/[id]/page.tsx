@@ -10,6 +10,7 @@ type AttractionDto = {
   address?: string | null;
   description?: string | null;
   audioUrl?: string | null;
+  audioDurationMinutes?: number;
 };
 
 type RoutePointDto = {

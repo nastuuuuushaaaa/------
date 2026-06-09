@@ -8,6 +8,7 @@ import {
   getPointDisplayMinutes,
   loadAudioMinutesByAttractionId,
   minMinutesToFirstIncluded,
+  travelMinutesToFirstIncluded,
   POINT_TIME_BUFFER_MINUTES,
 } from "@/lib/route-time";
 
@@ -130,18 +131,25 @@ export default function RoutePlanner({ route }: RoutePlannerProps) {
     );
   }, [route.points, excludedIds, audioMinutesByAttractionId, visibleStartIndex]);
 
+  /** Точное время перехода до первой посещаемой точки (только дорога, без запаса/аудио). */
+  const travelToFirstIncluded = useMemo(() => {
+    return travelMinutesToFirstIncluded(
+      route.points,
+      excludedIds,
+      visibleStartIndex
+    );
+  }, [route.points, excludedIds, visibleStartIndex]);
+
   /** Сколько минут нужно минимум с учётом возврата в ГУАП. */
   const minRequiredMinutes = useMemo(() => {
     if (minToFirstIncluded == null) return null;
     if (tripMode === "roundTrip") {
-      const firstIncluded = visiblePoints.find((p) => !excludedIds.has(p.attraction.id));
-      const returnLeg = firstIncluded
-        ? Math.ceil(firstIncluded.minutesForPoint / 2)
-        : Math.ceil(minToFirstIncluded / 2);
+      // Время возврата = время перехода до первой точки (путь обратно симметричен).
+      const returnLeg = travelToFirstIncluded ?? 0;
       return minToFirstIncluded + returnLeg;
     }
     return minToFirstIncluded;
-  }, [minToFirstIncluded, tripMode, visiblePoints, excludedIds]);
+  }, [minToFirstIncluded, tripMode, travelToFirstIncluded]);
 
   const validateMinutes = (total: number): string | null => {
     if (Number.isNaN(total) || total <= 0) {
@@ -154,8 +162,8 @@ export default function RoutePlanner({ route }: RoutePlannerProps) {
       if (tripMode === "oneWay") {
         return `Времени недостаточно: до первой точки нужно около ${minToFirstIncluded} мин. (переход, запас ${POINT_TIME_BUFFER_MINUTES} мин. и аудиогид). Укажите не меньше ${minRequiredMinutes} мин.`;
       }
-      const returnLeg = minRequiredMinutes - minToFirstIncluded;
-      return `Времени недостаточно: до первой точки около ${minToFirstIncluded} мин. и примерно ${returnLeg} мин. на возвращение в ГУАП (всего не меньше ${minRequiredMinutes} мин.).`;
+      const returnLeg = travelToFirstIncluded ?? 0;
+      return `Времени недостаточно: до первой точки около ${minToFirstIncluded} мин. и ${returnLeg} мин. на возвращение в ГУАП (всего не меньше ${minRequiredMinutes} мин.).`;
     }
     return null;
   };
@@ -294,8 +302,8 @@ export default function RoutePlanner({ route }: RoutePlannerProps) {
                   Необходимо вернуться обратно в ГУАП после прогулки
                 </span>
                 <span className="block text-xs text-guap-muted">
-                  Доступное время делится на три части: две трети — на маршрут и аудиогид, одна треть —
-                  на возвращение в вуз.
+                  В режиме возврата время расходуется на путь до точек, их посещение и аудиогид, а затем отдельно
+                  учитывается резерв на обратную дорогу в ГУАП.
                 </span>
               </span>
             </label>

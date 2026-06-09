@@ -110,21 +110,38 @@ export function minMinutesToFirstIncluded(
   return null;
 }
 
-/** Две трети бюджета на маршрут при возврате в ГУАП. */
-export function routeBudgetMinutesReturnToGuap(totalMinutes: number): number {
-  return Math.floor((totalMinutes * 2) / 3);
+/**
+ * Суммарное время переходов до первой посещаемой точки (только переходы, без запаса и аудио).
+ * Используется для точного расчёта времени возврата в ГУАП при режиме round-trip.
+ */
+export function travelMinutesToFirstIncluded(
+  points: RoutePointForTime[],
+  excludedIds: Set<number>,
+  startIndex = 0
+): number | null {
+  let acc = 0;
+  for (let i = startIndex; i < points.length; i++) {
+    const p = points[i];
+    acc += p.minutesForPoint;
+    if (!excludedIds.has(p.attraction.id)) return acc;
+  }
+  return null;
 }
 
 /**
- * Строит список посещаемых точек по бюджету времени.
- * Исключённые точки не попадают в маршрут, но их время перехода учитывается в бюджете.
+ * Строит список посещаемых точек по доступному времени.
+ * Исключённые точки не попадают в маршрут, но их переход учитывается.
+ *
+ * При roundTrip=true возврат рассчитывается точно: время пути назад равно
+ * сумме minutesForPoint от старта до последней включённой точки.
  */
 export function buildPersonalRouteSlice<T extends RoutePointForTime>(
   allPoints: T[],
-  budgetMinutes: number,
+  totalMinutes: number,
   excludedIds: Set<number>,
   audioMinutesByAttractionId: Map<number, number>,
-  startFromPointId = 0
+  startFromPointId = 0,
+  roundTrip = false
 ): T[] {
   let startIdx = 0;
   if (startFromPointId > 0) {
@@ -132,7 +149,8 @@ export function buildPersonalRouteSlice<T extends RoutePointForTime>(
     if (found >= 0) startIdx = found;
   }
 
-  let acc = 0;
+  let forwardTime = 0;
+  let cumulativeTravel = 0;
   const result: T[] = [];
 
   for (let i = startIdx; i < allPoints.length; i++) {
@@ -144,16 +162,20 @@ export function buildPersonalRouteSlice<T extends RoutePointForTime>(
       p.attraction.audioDurationMinutes
     );
     const travel = p.minutesForPoint;
+    cumulativeTravel += travel;
     const visitExtra = getPointVisitExtraMinutes(excluded, audio);
 
     if (!excluded) {
       const totalForVisit = travel + visitExtra;
-      if (acc + totalForVisit > budgetMinutes && result.length > 0) break;
-      acc += totalForVisit;
+      // При round-trip резервируем точное время на обратный путь от этой точки.
+      const returnTime = roundTrip ? cumulativeTravel : 0;
+
+      if (forwardTime + totalForVisit + returnTime > totalMinutes && result.length > 0) break;
+      forwardTime += totalForVisit;
       result.push(p);
-      if (acc > budgetMinutes && result.length === 1) break;
+      if (forwardTime + returnTime > totalMinutes && result.length === 1) break;
     } else {
-      acc += travel;
+      forwardTime += travel;
     }
   }
 

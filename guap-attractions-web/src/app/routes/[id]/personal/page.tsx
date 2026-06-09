@@ -10,7 +10,6 @@ import {
   buildPersonalRouteSlice,
   getPointDisplayMinutes,
   loadAudioMinutesByAttractionId,
-  routeBudgetMinutesReturnToGuap,
 } from "@/lib/route-time";
 
 const RouteMap = dynamic(
@@ -168,15 +167,13 @@ function PersonalRouteContent() {
       roundTripMode: boolean,
       audioMap: Map<number, number>
     ) => {
-      const budget =
-        roundTripMode && total > 0 ? routeBudgetMinutesReturnToGuap(total) : total;
-
       const result = buildPersonalRouteSlice(
         allPoints,
-        budget,
+        total,
         excludedForSave,
         audioMap,
-        startFrom
+        startFrom,
+        roundTripMode
       );
 
       if (cancelled) return;
